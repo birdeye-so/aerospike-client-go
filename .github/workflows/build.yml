@@ -65,7 +65,7 @@ jobs:
             {
               "stable": { "version": "ee-8.1.0.1" },
               "release": { "version": "ee-8.1.0.1_2" },
-              "8.1.1-pr" {"version": "x86-preview", "docker-user-name": "${{ secrets.QE_DOCKER_USERNAME }}", "docker-password": "${{ secrets.QE_DOCKER_PASSWORD }}", "image-url": "${{ secrets.QE_DOCKER_URL }}"}
+              "8.1.1-pr": {"version": "x86-preview", "docker-user-name": "${{ secrets.QE_DOCKER_USERNAME }}", "docker-password": "${{ secrets.QE_DOCKER_PASSWORD }}", "image-url": "${{ secrets.QE_DOCKER_URL }}"}
             }
           input_json: ${{ inputs.server-config-json }}
 
