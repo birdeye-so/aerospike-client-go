@@ -1,53 +1,90 @@
+# Aerospike Go Client Tests
+#
+# This workflow supports custom server configurations via workflow_dispatch.
+# You can provide a JSON configuration with the following format:
+#
+# {
+#   "stable": {
+#     "version": "8.1.0.1",
+#     "image-url": "custom-registry.example.com/aerospike",
+#     "docker-user-name": "username",
+#     "docker-password": "password"
+#   },
+#   "release": {
+#     "version": "8.1.0.1_2"
+#   }
+# }
+#
+# Notes:
+# - The matrix-action will parse this JSON and create matrix variables
+# - image-url, docker-user-name, and docker-password are optional
+# - If not provided, defaults to GitHub secrets or public Docker Hub
+# - Each key (e.g., "stable", "release") becomes a matrix configuration
+
 name: Aerospike Go Client Tests
-on:
+"on":
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      server-config-json:
+        description: 'Server configuration JSON (see workflow comments for format)'
+        required: false
+        type: string
+        default: |
+          {
+            "stable": { "version": "8.1.0.1" },
+            "release": { "version": "8.1.0.1_2" }
+          }
 
 env:
   AEROSPIKE_HOSTS: "127.0.0.1:3000"
   GODEBUG: fips140=only
   GOFIPS140: latest
+
 jobs:
-  make-matrix:
+  setup-matrix:
     runs-on: ubuntu-latest
     outputs:
-      input-matrix: ${{ steps.create-server-matrix.outputs.matrix }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
       go-version: ${{ steps.get-go-version.outputs.go-version }}
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Get Go version
         id: get-go-version
         run: |
-          echo "go-version=$(grep '^go [0-9]' go.mod | awk '{print $2}')" >> $GITHUB_OUTPUT
-          
-      - id: create-server-matrix
+          GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+          echo "go-version=${GO_VERSION}" >> $GITHUB_OUTPUT
+      
+      - name: Set up matrix
+        id: set-matrix
         uses: ./.github/actions/make-matrix
         with:
           default_json: |
             {
-              "stable": { "version": "8.1.0.1" },
-              "release": { "version": "8.1.0.1_2" }
+              "stable": { "version": "ee-8.1.0.1" },
+              "release": { "version": "ee-8.1.0.1_2" },
+              "8.1.1-pr" {"version": "x86-preview", "docker-user-name": "${{ secrets.QE_DOCKER_USERNAME }}", "docker-password": "${{ secrets.QE_DOCKER_PASSWORD }}", "image-url": "${{ secrets.QE_DOCKER_URL }}"}
             }
-          go_version: ${{ steps.get-go-version.outputs.go-version }}
+          input_json: ${{ inputs.server-config-json }}
 
-      - name: debug - print input variables
-        run: |
-          echo ${{ steps.get-go-version.outputs.go-version }}
-          echo ${{ steps.create-server-matrix.outputs.input-matrix }}
   build:
-    timeout-minutes: 30
-    needs: make-matrix
+    needs: setup-matrix
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     strategy:
-      matrix:
-        include: ${{ fromJson(needs.make-matrix.outputs.input-matrix) }}
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - name: "Setup Go ${{ matrix.go-version }}"
+      
+      - name: "Setup Go ${{ needs.setup-matrix.outputs.go-version }}"
         uses: actions/setup-go@v4
         with:
-          go-version: "${{ matrix.go-version }}"
+          go-version: "${{ needs.setup-matrix.outputs.go-version }}"
           cache: true
       - name: Fetch dependencies
         env:
@@ -64,13 +101,18 @@ jobs:
           go mod vendor
 
       - name: Display Go version
-        run: |
-          echo "Go version: ${{ matrix.go-version }}"
-
+        run: go version
+      
       - name: Set up Aerospike Database
-        uses: reugn/github-action-aerospike@v1
+        uses: ./.github/actions/run-ee-server
         with:
-          server-version: ${{ matrix.version }}
+          server-tag: ${{ matrix.version }}
+          docker-hub-username: ${{ matrix.docker-user-name || '' }}
+          docker-hub-password: ${{ matrix.docker-password || '' }}
+          container-repo-url: ${{ matrix.image-url || 'aerospike.jfrog.io/docker/' }}
+          oidc-provider: ${{ secrets.JFROG_OIDC_PROVIDER || 'github-aerospike' }}
+          oidc-audience: ${{ secrets.JFROG_OIDC_AUDIENCE || 'jfrog-aerospike' }}
+
       - name: Test Lua Code
         env: {GOPROXY: off, GOSUMDB: off, GOFLAGS: -mod=vendor}
         run: go run -mod=vendor github.com/onsi/ginkgo/v2/ginkgo -cover -race -r -keep-going -succinct -randomize-suites internal/lua
