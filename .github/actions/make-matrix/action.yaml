@@ -41,9 +41,17 @@ runs:
         fi
 
         echo "Validating JSON..."
-        echo "${JSON}" | jq . >/dev/null
+        if ! echo "${JSON}" | jq . >/dev/null 2>&1; then
+          echo "ERROR: Invalid JSON input"
+          exit 1
+        fi
 
+        echo "Building matrix with Go version: ${GO_VERSION}"
         MATRIX="$(echo "${JSON}" | jq -c --arg go "${GO_VERSION}" '[to_entries[] | { server: .key, go: $go } + .value]')"
+        
+        # Show matrix configuration count without exposing credentials
+        MATRIX_COUNT="$(echo "${MATRIX}" | jq 'length')"
+        echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
 
         {
           echo "matrix<<__JSON__"

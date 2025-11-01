@@ -5,13 +5,19 @@
 #
 # {
 #   "stable": {
-#     "version": "8.1.0.1",
+#     "version": "ee-8.1.0.1",
 #     "image-url": "custom-registry.example.com/aerospike",
 #     "docker-user-name": "username",
 #     "docker-password": "password"
 #   },
 #   "release": {
-#     "version": "8.1.0.1_2"
+#     "version": "ee-8.1.0.1_2"
+#   },
+#   "custom": {
+#     "version": "x86-preview",
+#     "docker-user-name": "secret-user",
+#     "docker-password": "secret-pass",
+#     "image-url": "custom-registry.example.com"
 #   }
 # }
 #
@@ -19,7 +25,7 @@
 # - The matrix-action will parse this JSON and create matrix variables
 # - image-url, docker-user-name, and docker-password are optional
 # - If not provided, defaults to GitHub secrets or public Docker Hub
-# - Each key (e.g., "stable", "release") becomes a matrix configuration
+# - Each key (e.g., "stable", "release", "custom") becomes a matrix configuration
 
 name: Aerospike Go Client Tests
 "on":
@@ -33,8 +39,8 @@ name: Aerospike Go Client Tests
         type: string
         default: |
           {
-            "stable": { "version": "8.1.0.1" },
-            "release": { "version": "8.1.0.1_2" }
+            "stable": { "version": "ee-8.1.0.1" },
+            "release": { "version": "ee-8.1.0.1_2" }
           }
 
 env:
@@ -67,7 +73,7 @@ jobs:
               "release": { "version": "ee-8.1.0.1_2" },
               "8.1.1-pr": { "version": "x86-preview", "docker-user-name": "${{ secrets.QE_DOCKER_USERNAME }}", "docker-password": "${{ secrets.QE_DOCKER_PASSWORD }}", "image-url": "${{ secrets.QE_DOCKER_URL }}" }
             }
-          input_json: ${{ inputs.server-config-json }}
+          input_json: ${{ github.event.inputs.server-config-json || '' }}
           go_version: ${{ steps.get-go-version.outputs.go-version }}
 
   build:
