@@ -139,29 +139,10 @@ jobs:
           echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
           echo "Matrix length: ${#MATRIX}"
           
-          {
-            echo "matrix<<__EOF_MATRIX__"
-            echo "${MATRIX}"
-            echo "__EOF_MATRIX__"
-          } >> "$GITHUB_OUTPUT"
-      
-      - name: Verify step output accessibility
+      - name: dump matrix 
         run: |
-          if [ -n "${{ steps.set-matrix.outputs.matrix }}" ]; then
-            echo "YES - Matrix is accessible in step output"
-          else
-            echo "NO - Matrix is NOT accessible in step output"
-          fi
-      
-  debug-matrix:
-    needs: setup-matrix
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug matrix output
-        run: |
-          echo "Matrix output:"
-          echo '${{ needs.setup-matrix.outputs.matrix }}'
-          echo "Matrix length: ${{ needs.setup-matrix.outputs.matrix && 'not empty' || 'EMPTY!' }}"
+          echo "Job will output matrix value from step:"
+          echo "Value: ${{ steps.set-matrix.outputs.matrix }}"
 
   build:
     needs: setup-matrix
