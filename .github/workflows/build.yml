@@ -118,19 +118,24 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       
       - name: Set up matrix
-        id: set-matrix
+        id: set-matrix-action
         uses: ./.github/actions/make-matrix
         with:
           default_json: ${{ steps.preprocess-json.outputs.processed_json }}
           go_version: ${{ steps.get-go-version.outputs.go-version }}
       
-      - name: Debug outputs
+      - name: Set job output
+        id: set-matrix
         run: |
-          echo "Go version output: ${{ steps.get-go-version.outputs.go-version }}"
           echo "Matrix output length: ${#MATRIX_OUT}"
           echo "Matrix output (first 200 chars): ${MATRIX_OUT:0:200}"
+          {
+            echo "matrix<<__MATRIX_EOF__"
+            echo "${MATRIX_OUT}"
+            echo "__MATRIX_EOF__"
+          } >> "$GITHUB_OUTPUT"
         env:
-          MATRIX_OUT: ${{ steps.set-matrix.outputs.matrix }}
+          MATRIX_OUT: ${{ steps.set-matrix-action.outputs.matrix }}
 
   debug-matrix:
     needs: setup-matrix
