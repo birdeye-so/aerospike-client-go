@@ -41,15 +41,18 @@ runs:
         echo "JSON validation successful"
 
         echo "Building matrix with Go version: ${GO_VERSION}"
-        MATRIX="$(echo "${JSON}" | jq -c --arg go "${GO_VERSION}" '[to_entries[] | { server: .key, go: $go } + .value]')"
+        MATRIX_ARRAY="$(echo "${JSON}" | jq -c --arg go "${GO_VERSION}" '[to_entries[] | { server: .key, go: $go } + .value]')"
         
-        if [[ -z "${MATRIX}" || "${MATRIX}" == "null" || "${MATRIX}" == "[]" ]]; then
+        if [[ -z "${MATRIX_ARRAY}" || "${MATRIX_ARRAY}" == "null" || "${MATRIX_ARRAY}" == "[]" ]]; then
           echo "ERROR: Generated matrix is empty or null"
           exit 1
         fi
         
+        # Wrap array in object with 'include' key for GitHub Actions matrix strategy
+        MATRIX="$(echo "${MATRIX_ARRAY}" | jq -c '{include: .}')"
+        
         # Show matrix configuration count without exposing credentials
-        MATRIX_COUNT="$(echo "${MATRIX}" | jq 'length')"
+        MATRIX_COUNT="$(echo "${MATRIX_ARRAY}" | jq 'length')"
         echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
 
         {
