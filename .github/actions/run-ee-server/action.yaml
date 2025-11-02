@@ -54,9 +54,13 @@ runs:
     - name: Docker login
       run: |
         if [[ "${{ inputs.container-repo-url }}" == *"jfrog.io"* ]]; then
-          docker login ${{ inputs.container-repo-url }} --username ${{ steps.setup-jfrog-cli.outputs.oidc-user }} --password ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+          echo "Logging in to JFrog registry..."
+          echo "${{ steps.setup-jfrog-cli.outputs.oidc-token }}" | docker login ${{ inputs.container-repo-url }} --username ${{ steps.setup-jfrog-cli.outputs.oidc-user }} --password-stdin
         elif [[ -n "${{ inputs.docker-hub-username }}" ]] && [[ -n "${{ inputs.docker-hub-password }}" ]]; then
-          docker login ${{ inputs.container-repo-url }} --username ${{ inputs.docker-hub-username }} --password ${{ inputs.docker-hub-password }}
+          echo "Logging in to Docker registry..."
+          echo "${{ inputs.docker-hub-password }}" | docker login ${{ inputs.container-repo-url }} --username ${{ inputs.docker-hub-username }} --password-stdin
+        else
+          echo "No credentials provided, skipping docker login"
         fi
       shell: bash
 

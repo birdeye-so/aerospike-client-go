@@ -3,11 +3,8 @@ description: Builds a server matrix from JSON or file; Go version is passed sepa
 
 inputs:
   default_json:
-    description: Default JSON of servers (with versions) if no file exists.
+    description: Preprocessed JSON of servers (with versions).
     required: true
-  input_json:
-    description: JSON input from workflow_dispatch (takes precedence over default_json).
-    required: false
   test_servers_file_path:
     description: Repo-relative path to server matrix file (optional).
     required: false
@@ -22,32 +19,34 @@ runs:
       shell: bash
       env:
         DEFAULT_JSON: ${{ inputs.default_json }}
-        INPUT_JSON: ${{ inputs.input_json }}
         TEST_SERVERS_FILE_PATH: ${{ inputs.test_servers_file_path }}
         GO_VERSION: ${{ inputs.go_version }}
       run: |
         set -euo pipefail
 
-        # Priority: input_json > file > default_json
-        if [[ -n "${INPUT_JSON:-}" ]]; then
-          echo "Using input_json from workflow_dispatch"
-          JSON="${INPUT_JSON}"
-        elif [[ -n "${TEST_SERVERS_FILE_PATH:-}" && -s "${TEST_SERVERS_FILE_PATH}" ]]; then
+        # Priority: file > default_json
+        if [[ -n "${TEST_SERVERS_FILE_PATH:-}" && -s "${TEST_SERVERS_FILE_PATH}" ]]; then
           echo "Using ${TEST_SERVERS_FILE_PATH} from repository"
           JSON="$(cat "${TEST_SERVERS_FILE_PATH}")"
         else
-          echo "Using default_json input"
+          echo "Using preprocessed JSON input"
           JSON="${DEFAULT_JSON}"
         fi
 
         echo "Validating JSON..."
-        if ! echo "${JSON}" | jq . >/dev/null 2>&1; then
+        if ! echo "${JSON}" | jq empty >/dev/null 2>&1; then
           echo "ERROR: Invalid JSON input"
           exit 1
         fi
+        echo "JSON validation successful"
 
         echo "Building matrix with Go version: ${GO_VERSION}"
         MATRIX="$(echo "${JSON}" | jq -c --arg go "${GO_VERSION}" '[to_entries[] | { server: .key, go: $go } + .value]')"
+        
+        if [[ -z "${MATRIX}" || "${MATRIX}" == "null" || "${MATRIX}" == "[]" ]]; then
+          echo "ERROR: Generated matrix is empty or null"
+          exit 1
+        fi
         
         # Show matrix configuration count without exposing credentials
         MATRIX_COUNT="$(echo "${MATRIX}" | jq 'length')"

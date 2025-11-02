@@ -1,31 +1,9 @@
 # Aerospike Go Client Tests
 #
-# This workflow supports custom server configurations via workflow_dispatch.
-# You can provide a JSON configuration with the following format:
-#
-# {
-#   "stable": {
-#     "version": "ee-8.1.0.1",
-#     "image-url": "custom-registry.example.com/aerospike",
-#     "docker-user-name": "username",
-#     "docker-password": "password"
-#   },
-#   "release": {
-#     "version": "ee-8.1.0.1_2"
-#   },
-#   "custom": {
-#     "version": "x86-preview",
-#     "docker-user-name": "secret-user",
-#     "docker-password": "secret-pass",
-#     "image-url": "custom-registry.example.com"
-#   }
-# }
-#
-# Notes:
-# - The matrix-action will parse this JSON and create matrix variables
-# - image-url, docker-user-name, and docker-password are optional
-# - If not provided, defaults to GitHub secrets or public Docker Hub
-# - Each key (e.g., "stable", "release", "custom") becomes a matrix configuration
+# Supports custom server configurations via workflow_dispatch
+# - Use {{VAR_NAME}} placeholders for secrets (e.g., {{QE_DOCKER_USERNAME}})
+# - Add secrets: Repository Settings → env section (line ~56) → JSON template
+# - Fields: version (required), docker-user-name, docker-password, image-url (optional)
 
 name: Aerospike Go Client Tests
 "on":
@@ -34,14 +12,10 @@ name: Aerospike Go Client Tests
   workflow_dispatch:
     inputs:
       server-config-json:
-        description: 'Server configuration JSON (see workflow comments for format)'
+        description: 'Server configuration JSON template (use {{SECRET_NAME}} placeholders). Leave empty for default.'
         required: false
         type: string
-        default: |
-          {
-            "stable": { "version": "ee-8.1.0.1" },
-            "release": { "version": "ee-8.1.0.1_2" }
-          }
+        default: ''
 
 env:
   AEROSPIKE_HOSTS: "127.0.0.1:3000"
@@ -63,17 +37,91 @@ jobs:
           GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
           echo "go-version=${GO_VERSION}" >> $GITHUB_OUTPUT
       
+      - name: Preprocess server configuration JSON
+        id: preprocess-json
+        env:
+          INPUT_JSON: ${{ github.event.inputs.server-config-json || '' }}
+          # Add your secrets here - they will be available as {{SECRET_NAME}} in templates
+          DOCKER_USERNAME: ${{ secrets.QE_DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.QE_DOCKER_PASSWORD }}
+          DOCKER_URL: ${{ secrets.QE_DOCKER_URL }}
+          # Example: Add more credential sets as needed
+          # REGISTRY2_USERNAME: ${{ secrets.REGISTRY2_USERNAME }}
+          # REGISTRY2_PASSWORD: ${{ secrets.REGISTRY2_PASSWORD }}
+          # REGISTRY2_URL: ${{ secrets.REGISTRY2_URL }}
+        run: |
+          set -euo pipefail
+          
+          # Default template with secret placeholders
+          DEFAULT_TEMPLATE='{
+            "stable": { "version": "ee-8.1.0.1" },
+            "release": { "version": "ee-8.1.0.1_2" },
+            "8.1.1-pr": { 
+              "version": "x86-preview", 
+              "docker-user-name": "{{DOCKER_USERNAME}}", 
+              "docker-password": "{{DOCKER_PASSWORD}}", 
+              "image-url": "{{DOCKER_URL}}" 
+            }
+          }'
+          
+          # Use input JSON if provided, otherwise use default template
+          if [[ -n "${INPUT_JSON}" ]]; then
+            echo "Using provided JSON template"
+            TEMPLATE="${INPUT_JSON}"
+          else
+            echo "Using default JSON template"
+            TEMPLATE="${DEFAULT_TEMPLATE}"
+          fi
+          
+          # Generic placeholder replacement: Replace {{VAR_NAME}} with env var value
+          # This automatically handles ALL environment variables
+          PROCESSED_JSON="${TEMPLATE}"
+          
+          # Find all placeholders in the template
+          PLACEHOLDERS=$(echo "${TEMPLATE}" | grep -o '{{[A-Z_][A-Z0-9_]*}}' | sort -u || true)
+          
+          if [[ -n "${PLACEHOLDERS}" ]]; then
+            echo "Found placeholders to replace"
+            for PLACEHOLDER in ${PLACEHOLDERS}; do
+              # Extract variable name (remove {{ and }})
+              VAR_NAME="${PLACEHOLDER//\{\{/}"
+              VAR_NAME="${VAR_NAME//\}\}/}"
+              
+              # Get the value from environment variable
+              VAR_VALUE="${!VAR_NAME:-}"
+              
+              if [[ -n "${VAR_VALUE}" ]]; then
+                # Replace placeholder with actual value
+                PROCESSED_JSON="${PROCESSED_JSON//${PLACEHOLDER}/${VAR_VALUE}}"
+              else
+                echo "Warning: Placeholder ${PLACEHOLDER} found but env var ${VAR_NAME} is not set"
+              fi
+            done
+          fi
+          
+          # Validate the processed JSON (suppress output to avoid leaking secrets)
+          echo "Validating processed JSON..."
+          if ! echo "${PROCESSED_JSON}" | jq empty >/dev/null 2>&1; then
+            echo "ERROR: Invalid JSON after preprocessing"
+            exit 1
+          fi
+          
+          # Count configurations without displaying content
+          CONFIG_COUNT=$(echo "${PROCESSED_JSON}" | jq 'keys | length')
+          echo "Preprocessing complete. Configuration count: ${CONFIG_COUNT}"
+          
+          # Output the processed JSON (not visible in logs, only in job outputs)
+          {
+            echo "processed_json<<__JSON__"
+            echo "${PROCESSED_JSON}"
+            echo "__JSON__"
+          } >> "$GITHUB_OUTPUT"
+      
       - name: Set up matrix
         id: set-matrix
         uses: ./.github/actions/make-matrix
         with:
-          default_json: |
-            {
-              "stable": { "version": "ee-8.1.0.1" },
-              "release": { "version": "ee-8.1.0.1_2" },
-              "8.1.1-pr": { "version": "x86-preview", "docker-user-name": "${{ secrets.QE_DOCKER_USERNAME }}", "docker-password": "${{ secrets.QE_DOCKER_PASSWORD }}", "image-url": "${{ secrets.QE_DOCKER_URL }}" }
-            }
-          input_json: ${{ github.event.inputs.server-config-json || '' }}
+          default_json: ${{ steps.preprocess-json.outputs.processed_json }}
           go_version: ${{ steps.get-go-version.outputs.go-version }}
 
   build:
