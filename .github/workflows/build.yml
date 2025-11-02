@@ -117,25 +117,35 @@ jobs:
             echo "__JSON__"
           } >> "$GITHUB_OUTPUT"
       
-      - name: Set up matrix
-        id: set-matrix-action
-        uses: ./.github/actions/make-matrix
-        with:
-          default_json: ${{ steps.preprocess-json.outputs.processed_json }}
-          go_version: ${{ steps.get-go-version.outputs.go-version }}
-      
-      - name: Set job output
+      - name: Build matrix
         id: set-matrix
+        env:
+          PROCESSED_JSON: ${{ steps.preprocess-json.outputs.processed_json }}
+          GO_VERSION: ${{ steps.get-go-version.outputs.go-version }}
         run: |
-          echo "Matrix output length: ${#MATRIX_OUT}"
-          echo "Matrix output (first 200 chars): ${MATRIX_OUT:0:200}"
+          set -euo pipefail
+          
+          echo "Building matrix with Go version: ${GO_VERSION}"
+          MATRIX_ARRAY="$(echo "${PROCESSED_JSON}" | jq -c --arg go "${GO_VERSION}" '[to_entries[] | { server: .key, go: $go } + .value]')"
+          
+          if [[ -z "${MATRIX_ARRAY}" || "${MATRIX_ARRAY}" == "null" || "${MATRIX_ARRAY}" == "[]" ]]; then
+            echo "ERROR: Generated matrix is empty or null"
+            exit 1
+          fi
+          
+          # Wrap array in object with 'include' key for GitHub Actions matrix strategy
+          MATRIX="$(echo "${MATRIX_ARRAY}" | jq -c '{include: .}')"
+          
+          # Show matrix configuration count without exposing credentials
+          MATRIX_COUNT="$(echo "${MATRIX_ARRAY}" | jq 'length')"
+          echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
+          echo "Matrix length: ${#MATRIX}"
+          
           {
             echo "matrix<<__MATRIX_EOF__"
-            echo "${MATRIX_OUT}"
+            echo "${MATRIX}"
             echo "__MATRIX_EOF__"
           } >> "$GITHUB_OUTPUT"
-        env:
-          MATRIX_OUT: ${{ steps.set-matrix-action.outputs.matrix }}
 
   debug-matrix:
     needs: setup-matrix
