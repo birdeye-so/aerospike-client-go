@@ -138,12 +138,20 @@ jobs:
           MATRIX_COUNT="$(echo "${MATRIX_ARRAY}" | jq 'length')"
           echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
           echo "Matrix length: ${#MATRIX}"
-
+          
           {
-            echo 'matrix<<EOF'
+            echo "matrix<<__EOF_MATRIX__"
             echo "${MATRIX}"
-            echo 'EOF'
+            echo "__EOF_MATRIX__"
           } >> "$GITHUB_OUTPUT"
+      
+      - name: Verify step output accessibility
+        run: |
+          if [ -n "${{ steps.set-matrix.outputs.matrix }}" ]; then
+            echo "YES - Matrix is accessible in step output"
+          else
+            echo "NO - Matrix is NOT accessible in step output"
+          fi
       
   debug-matrix:
     needs: setup-matrix
