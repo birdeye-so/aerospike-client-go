@@ -42,9 +42,9 @@ jobs:
         env:
           INPUT_JSON: ${{ github.event.inputs.server-config-json || '' }}
           # Add your secrets here - they will be available as {{SECRET_NAME}} in templates
-          DOCKER_USERNAME: ${{ secrets.QE_DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.QE_DOCKER_PASSWORD }}
-          DOCKER_URL: ${{ secrets.QE_DOCKER_URL }}
+          DOCKER_USERNAME: ${{ secrets.TEST_DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.TEST_DOCKER_PASSWORD }}
+          DOCKER_URL: ${{ secrets.TEST_DOCKER_URL }}
           # Example: Add more credential sets as needed
           # REGISTRY2_USERNAME: ${{ secrets.REGISTRY2_USERNAME }}
           # REGISTRY2_PASSWORD: ${{ secrets.REGISTRY2_PASSWORD }}
@@ -123,6 +123,24 @@ jobs:
         with:
           default_json: ${{ steps.preprocess-json.outputs.processed_json }}
           go_version: ${{ steps.get-go-version.outputs.go-version }}
+      
+      - name: Debug outputs
+        run: |
+          echo "Go version output: ${{ steps.get-go-version.outputs.go-version }}"
+          echo "Matrix output length: ${#MATRIX_OUT}"
+          echo "Matrix output (first 200 chars): ${MATRIX_OUT:0:200}"
+        env:
+          MATRIX_OUT: ${{ steps.set-matrix.outputs.matrix }}
+
+  debug-matrix:
+    needs: setup-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug matrix output
+        run: |
+          echo "Matrix output:"
+          echo '${{ needs.setup-matrix.outputs.matrix }}'
+          echo "Matrix length: ${{ needs.setup-matrix.outputs.matrix && 'not empty' || 'EMPTY!' }}"
 
   build:
     needs: setup-matrix
