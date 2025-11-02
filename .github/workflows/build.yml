@@ -133,23 +133,18 @@ jobs:
             exit 1
           fi
           
-          # Wrap array in object with 'include' key for GitHub Actions matrix strategy
           MATRIX="$(echo "${MATRIX_ARRAY}" | jq -c '{include: .}')"
           
-          # Show matrix configuration count without exposing credentials
           MATRIX_COUNT="$(echo "${MATRIX_ARRAY}" | jq 'length')"
           echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
           echo "Matrix length: ${#MATRIX}"
-          
-          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
-      
-      - name: Verify output was set
-        run: |
-          echo "Checking GITHUB_OUTPUT file..."
-          cat "$GITHUB_OUTPUT" || echo "GITHUB_OUTPUT file not found"
-          echo "---"
-          echo "Step output: ${{ steps.set-matrix.outputs.matrix }}"
 
+          {
+            echo 'matrix<<EOF'
+            echo "${MATRIX}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      
   debug-matrix:
     needs: setup-matrix
     runs-on: ubuntu-latest
