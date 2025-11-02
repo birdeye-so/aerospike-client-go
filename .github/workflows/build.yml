@@ -139,6 +139,9 @@ jobs:
           echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
           echo "Matrix length: ${#MATRIX}"
           
+          # Write the output
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+          
       - name: dump matrix 
         run: |
           echo "Job will output matrix value from step:"
