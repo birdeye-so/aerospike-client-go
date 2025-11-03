@@ -26,8 +26,8 @@ jobs:
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
-      matrix-b64: ${{ steps.set-matrix.outputs.matrix }}
-      matrix-raw: ${{ steps.set-matrix.outputs.matrix-raw }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix-b64: ${{ steps.set-matrix.outputs.matrix-b64 }}
       go-version: ${{ steps.get-go-version.outputs.go-version }}
     steps:
       - uses: actions/checkout@v4
@@ -132,16 +132,19 @@ jobs:
           echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
           echo "Matrix length: ${#MATRIX}"
           
-          # Base64 encode to ensure it propagates correctly between jobs
+          # URL encode for safe propagation between jobs
+          MATRIX_ENCODED=$(echo -n "${MATRIX}" | jq -sRr @uri)
+          echo "matrix=${MATRIX_ENCODED}" >> "$GITHUB_OUTPUT"
+          
+          # Also try base64 
           MATRIX_B64=$(echo -n "${MATRIX}" | base64 -w 0)
-          echo "::set-output name=matrix::${MATRIX_B64}"
-          echo "::set-output name=matrix-raw::${MATRIX}"
+          echo "matrix-b64=${MATRIX_B64}" >> "$GITHUB_OUTPUT"
           
       - name: dump matrix 
         run: |
           echo "Job will output matrix values from step:"
-          echo "B64: ${{ steps.set-matrix.outputs.matrix }}"
-          echo "Raw: ${{ steps.set-matrix.outputs.matrix-raw }}"
+          echo "URL-encoded: ${{ steps.set-matrix.outputs.matrix }}"
+          echo "Base64: ${{ steps.set-matrix.outputs.matrix-b64 }}"
 
   debug-outputs:
     needs: setup-matrix
@@ -149,10 +152,10 @@ jobs:
     steps:
       - name: Check job outputs
         run: |
+          echo "URL output: ${{ needs.setup-matrix.outputs.matrix }}"
           echo "B64 output: ${{ needs.setup-matrix.outputs.matrix-b64 }}"
-          echo "Raw output: ${{ needs.setup-matrix.outputs.matrix-raw }}"
+          echo "URL empty? ${{ needs.setup-matrix.outputs.matrix == '' }}"
           echo "B64 empty? ${{ needs.setup-matrix.outputs.matrix-b64 == '' }}"
-          echo "Raw empty? ${{ needs.setup-matrix.outputs.matrix-raw == '' }}"
 
   build:
     needs: setup-matrix
@@ -166,8 +169,8 @@ jobs:
     steps:
       - name: Debug what build job receives
         run: |
+          echo "URL: ${{ needs.setup-matrix.outputs.matrix }}"
           echo "B64: ${{ needs.setup-matrix.outputs.matrix-b64 }}"
-          echo "Raw: ${{ needs.setup-matrix.outputs.matrix-raw }}"
           echo "Go version: ${{ needs.setup-matrix.outputs.go-version }}"
       
       - uses: actions/checkout@v4
