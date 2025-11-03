@@ -73,31 +73,23 @@ jobs:
             TEMPLATE="${DEFAULT_TEMPLATE}"
           fi
           
-          # Generic placeholder replacement: Replace {{VAR_NAME}} with env var value
-          # This automatically handles ALL environment variables
-          PROCESSED_JSON="${TEMPLATE}"
-          
-          # Find all placeholders in the template
-          PLACEHOLDERS=$(echo "${TEMPLATE}" | grep -o '{{[A-Z_][A-Z0-9_]*}}' | sort -u || true)
-          
-          if [[ -n "${PLACEHOLDERS}" ]]; then
-            echo "Found placeholders to replace"
-            for PLACEHOLDER in ${PLACEHOLDERS}; do
-              # Extract variable name (remove {{ and }})
-              VAR_NAME="${PLACEHOLDER//\{\{/}"
-              VAR_NAME="${VAR_NAME//\}\}/}"
-              
-              # Get the value from environment variable
-              VAR_VALUE="${!VAR_NAME:-}"
-              
-              if [[ -n "${VAR_VALUE}" ]]; then
-                # Replace placeholder with actual value
-                PROCESSED_JSON="${PROCESSED_JSON//${PLACEHOLDER}/${VAR_VALUE}}"
+          # Use jq to replace placeholders with actual values
+          PROCESSED_JSON=$(echo "${TEMPLATE}" | jq \
+            --arg docker_user "${DOCKER_USERNAME:-}" \
+            --arg docker_pass "${DOCKER_PASSWORD:-}" \
+            --arg docker_url "${DOCKER_URL:-}" \
+            '
+            walk(
+              if type == "string" then
+                . | gsub("\\{\\{DOCKER_USERNAME\\}}"; $docker_user)
+                  | gsub("\\{\\{DOCKER_PASSWORD\\}}"; $docker_pass)
+                  | gsub("\\{\\{DOCKER_URL\\}}"; $docker_url)
               else
-                echo "Warning: Placeholder ${PLACEHOLDER} found but env var ${VAR_NAME} is not set"
-              fi
-            done
-          fi
+                .
+              end
+            )
+            '
+          )
           
           # Validate the processed JSON (suppress output to avoid leaking secrets)
           echo "Validating processed JSON..."
