@@ -1,0 +1,15 @@
+{
+  "stable": { 
+    "version": "ee-8.1.0.1"
+  },
+  "release": { 
+    "version": "ee-8.1.0.1_2"
+  },
+  "8.1.1-pr": { 
+    "version": "x86-preview",
+    "docker-user-name": "{{DOCKER_USERNAME}}",
+    "docker-password": "{{DOCKER_PASSWORD}}",
+    "image-url": "{{DOCKER_URL}}"
+  }
+}
+

@@ -23,24 +23,11 @@ env:
   GOFIPS140: latest
 
 jobs:
-  build:
+  setup:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - server: stable
-            version: ee-8.1.0.1
-          - server: release
-            version: ee-8.1.0.1_2
-          - server: 8.1.1-pr
-            version: x86-preview
-            docker-user-name: ${{ secrets.TEST_DOCKER_USERNAME }}
-            docker-password: ${{ secrets.TEST_DOCKER_PASSWORD }}
-            image-url: ${{ secrets.TEST_DOCKER_URL }}
+    outputs:
+      servers: ${{ steps.set-servers.outputs.servers }}
+      go-version: ${{ steps.get-go-version.outputs.go-version }}
     steps:
       - uses: actions/checkout@v4
       
@@ -50,11 +37,81 @@ jobs:
           GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
           echo "go-version=${GO_VERSION}" >> $GITHUB_OUTPUT
       
+      - name: Get server list
+        id: set-servers
+        run: |
+          # Read server names from config file (or use default)
+          if [ -f ".github/server-matrix.json" ]; then
+            SERVERS=$(jq -r 'keys | @json' .github/server-matrix.json)
+          else
+            SERVERS='["stable","release","8.1.1-pr"]'
+          fi
+          echo "servers=${SERVERS}" >> $GITHUB_OUTPUT
+          echo "Server list: ${SERVERS}"
+  
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        server: ${{ fromJson(needs.setup.outputs.servers) }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Load server configuration
+        id: load-config
+        env:
+          DOCKER_USERNAME: ${{ secrets.TEST_DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.TEST_DOCKER_PASSWORD }}
+          DOCKER_URL: ${{ secrets.TEST_DOCKER_URL }}
+          SERVER: ${{ matrix.server }}
+        run: |
+          # Load configuration for this server
+          if [ -f ".github/server-matrix.json" ]; then
+            CONFIG=$(jq -r --arg server "$SERVER" '.[$server]' .github/server-matrix.json)
+          else
+            echo "ERROR: server-matrix.json not found"
+            exit 1
+          fi
+          
+          # Replace placeholders with secrets
+          CONFIG=$(echo "$CONFIG" | jq \
+            --arg docker_user "${DOCKER_USERNAME:-}" \
+            --arg docker_pass "${DOCKER_PASSWORD:-}" \
+            --arg docker_url "${DOCKER_URL:-}" \
+            'walk(
+              if type == "string" then
+                . | gsub("\\{\\{DOCKER_USERNAME\\}}"; $docker_user)
+                  | gsub("\\{\\{DOCKER_PASSWORD\\}}"; $docker_pass)
+                  | gsub("\\{\\{DOCKER_URL\\}}"; $docker_url)
+              else
+                .
+              end
+            )')
+          
+          # Extract values
+          VERSION=$(echo "$CONFIG" | jq -r '.version')
+          DOCKER_USER=$(echo "$CONFIG" | jq -r '."docker-user-name" // ""')
+          DOCKER_PASS=$(echo "$CONFIG" | jq -r '."docker-password" // ""')
+          IMAGE_URL=$(echo "$CONFIG" | jq -r '."image-url" // "aerospike.jfrog.io/docker/"')
+          
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "docker-user=${DOCKER_USER}" >> $GITHUB_OUTPUT
+          echo "docker-pass=${DOCKER_PASS}" >> $GITHUB_OUTPUT  
+          echo "image-url=${IMAGE_URL}" >> $GITHUB_OUTPUT
+          
+          echo "Loaded config for ${SERVER}: version=${VERSION}"
+      
       - name: "Setup Go"
         uses: actions/setup-go@v4
         with:
-          go-version: "${{ steps.get-go-version.outputs.go-version }}"
+          go-version: "${{ needs.setup.outputs.go-version }}"
           cache: true
+      
       - name: Fetch dependencies
         env:
           GODEBUG: fips140=on
@@ -75,10 +132,10 @@ jobs:
       - name: Set up Aerospike Database
         uses: ./.github/actions/run-ee-server
         with:
-          server-tag: ${{ matrix.version }}
-          docker-hub-username: ${{ matrix.docker-user-name || '' }}
-          docker-hub-password: ${{ matrix.docker-password || '' }}
-          container-repo-url: ${{ matrix.image-url || 'aerospike.jfrog.io/docker/' }}
+          server-tag: ${{ steps.load-config.outputs.version }}
+          docker-hub-username: ${{ steps.load-config.outputs.docker-user }}
+          docker-hub-password: ${{ steps.load-config.outputs.docker-pass }}
+          container-repo-url: ${{ steps.load-config.outputs.image-url }}
           oidc-provider: ${{ secrets.JFROG_OIDC_PROVIDER || 'github-aerospike' }}
           oidc-audience: ${{ secrets.JFROG_OIDC_AUDIENCE || 'jfrog-aerospike' }}
 
