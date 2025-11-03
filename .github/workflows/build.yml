@@ -138,8 +138,10 @@ jobs:
           docker-hub-username: ${{ steps.load-config.outputs.docker-user }}
           docker-hub-password: ${{ steps.load-config.outputs.docker-pass }}
           container-repo-url: ${{ steps.load-config.outputs.image-url }}
-          oidc-provider: ${{ secrets.JFROG_OIDC_PROVIDER || 'github-aerospike' }}
-          oidc-audience: ${{ secrets.JFROG_OIDC_AUDIENCE || 'jfrog-aerospike' }}
+          # oidc-provider: ${{ secrets.JFROG_OIDC_PROVIDER || 'github-aerospike' }}
+          # oidc-audience: ${{ secrets.JFROG_OIDC_AUDIENCE || 'jfrog-aerospike' }}
+          oidc-provider: "database-gh-areospike"
+          oidc-audience: "database-gh-areospike"
 
       - name: Test Lua Code
         env: {GOPROXY: off, GOSUMDB: off, GOFLAGS: -mod=vendor}
