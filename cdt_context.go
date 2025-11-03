@@ -38,8 +38,14 @@ const (
 // An array of CTX identifies location of the list/map on multiple
 // levels on nesting.
 type CDTContext struct {
-	Id         int
-	Value      Value
+	Id int
+	// Value is the value of the context.
+	// It can be a literal value or a computed value.
+	// Either Value or Expression must be set.
+	Value Value
+	// Expression is the expression of the context.
+	// It can be a filter expression or a computed expression.
+	// Either Value or Expression must be set.
 	Expression *Expression
 }
 

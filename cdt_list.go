@@ -296,7 +296,11 @@ func packCDTIfcVarParamsAsArray(packer BufferEx, opType int16, ctx []*CDTContext
 			}
 			size += n
 
-			if c.Value != nil {
+			if c.Value != nil && c.Expression != nil {
+				return size, newError(types.PARAMETER_ERROR, "CDTContext must have either a Value or an Expression but not both")
+			} else if c.Value == nil && c.Expression == nil {
+				return size, newError(types.PARAMETER_ERROR, "CDTContext must have either a Value or an Expression")
+			} else if c.Value != nil {
 				if n, err = c.Value.pack(packer); err != nil {
 					return size + n, err
 				}
@@ -306,8 +310,6 @@ func packCDTIfcVarParamsAsArray(packer BufferEx, opType int16, ctx []*CDTContext
 					return size + n, err
 				}
 				size += n
-			} else {
-				return size, newError(types.PARAMETER_ERROR, "CDTContext must have either a Value or an Expression")
 			}
 		}
 
@@ -385,7 +387,7 @@ func packCDTCreate(packer BufferEx, opType int16, ctx []*CDTContext, flag int, p
 				return size + n, err
 			}
 			size += n
-		} else if c.Expression != nil{
+		} else if c.Expression != nil {
 			if n, err = c.Expression.pack(packer); err != nil {
 				return size + n, err
 			}
