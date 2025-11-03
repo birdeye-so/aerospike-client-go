@@ -23,12 +23,24 @@ env:
   GOFIPS140: latest
 
 jobs:
-  setup-matrix:
+  build:
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      matrix-b64: ${{ steps.set-matrix.outputs.matrix-b64 }}
-      go-version: ${{ steps.get-go-version.outputs.go-version }}
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - server: stable
+            version: ee-8.1.0.1
+          - server: release
+            version: ee-8.1.0.1_2
+          - server: 8.1.1-pr
+            version: x86-preview
+            docker-user-name: ${{ secrets.TEST_DOCKER_USERNAME }}
+            docker-password: ${{ secrets.TEST_DOCKER_PASSWORD }}
+            image-url: ${{ secrets.TEST_DOCKER_URL }}
     steps:
       - uses: actions/checkout@v4
       
@@ -38,147 +50,10 @@ jobs:
           GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
           echo "go-version=${GO_VERSION}" >> $GITHUB_OUTPUT
       
-      - name: Preprocess server configuration JSON
-        id: preprocess-json
-        env:
-          INPUT_JSON: ${{ github.event.inputs.server-config-json || '' }}
-          # Add your secrets here - they will be available as {{SECRET_NAME}} in templates
-          DOCKER_USERNAME: ${{ secrets.TEST_DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.TEST_DOCKER_PASSWORD }}
-          DOCKER_URL: ${{ secrets.TEST_DOCKER_URL }}
-          # Example: Add more credential sets as needed
-          # REGISTRY2_USERNAME: ${{ secrets.REGISTRY2_USERNAME }}
-          # REGISTRY2_PASSWORD: ${{ secrets.REGISTRY2_PASSWORD }}
-          # REGISTRY2_URL: ${{ secrets.REGISTRY2_URL }}
-        run: |
-          set -euo pipefail
-          
-          # Default template with secret placeholders
-          DEFAULT_TEMPLATE='{
-            "stable": { "version": "ee-8.1.0.1" },
-            "release": { "version": "ee-8.1.0.1_2" },
-            "8.1.1-pr": { 
-              "version": "x86-preview", 
-              "docker-user-name": "{{DOCKER_USERNAME}}", 
-              "docker-password": "{{DOCKER_PASSWORD}}", 
-              "image-url": "{{DOCKER_URL}}" 
-            }
-          }'
-          
-          # Use input JSON if provided, otherwise use default template
-          if [[ -n "${INPUT_JSON}" ]]; then
-            echo "Using provided JSON template"
-            TEMPLATE="${INPUT_JSON}"
-          else
-            echo "Using default JSON template"
-            TEMPLATE="${DEFAULT_TEMPLATE}"
-          fi
-          
-          # Use jq to replace placeholders with actual values
-          PROCESSED_JSON=$(echo "${TEMPLATE}" | jq \
-            --arg docker_user "${DOCKER_USERNAME:-}" \
-            --arg docker_pass "${DOCKER_PASSWORD:-}" \
-            --arg docker_url "${DOCKER_URL:-}" \
-            '
-            walk(
-              if type == "string" then
-                . | gsub("\\{\\{DOCKER_USERNAME\\}}"; $docker_user)
-                  | gsub("\\{\\{DOCKER_PASSWORD\\}}"; $docker_pass)
-                  | gsub("\\{\\{DOCKER_URL\\}}"; $docker_url)
-              else
-                .
-              end
-            )
-            '
-          )
-          
-          # Validate the processed JSON (suppress output to avoid leaking secrets)
-          echo "Validating processed JSON..."
-          if ! echo "${PROCESSED_JSON}" | jq empty >/dev/null 2>&1; then
-            echo "ERROR: Invalid JSON after preprocessing"
-            exit 1
-          fi
-          
-          # Count configurations without displaying content
-          CONFIG_COUNT=$(echo "${PROCESSED_JSON}" | jq 'keys | length')
-          echo "Preprocessing complete. Configuration count: ${CONFIG_COUNT}"
-          
-          # Output the processed JSON (not visible in logs, only in job outputs)
-          {
-            echo "processed_json<<__JSON__"
-            echo "${PROCESSED_JSON}"
-            echo "__JSON__"
-          } >> "$GITHUB_OUTPUT"
-      
-      - name: Build matrix
-        id: set-matrix
-        env:
-          PROCESSED_JSON: ${{ steps.preprocess-json.outputs.processed_json }}
-          GO_VERSION: ${{ steps.get-go-version.outputs.go-version }}
-        run: |
-          set -euo pipefail
-          
-          echo "Building matrix with Go version: ${GO_VERSION}"
-          MATRIX_ARRAY="$(echo "${PROCESSED_JSON}" | jq -c --arg go "${GO_VERSION}" '[to_entries[] | { server: .key, go: $go } + .value]')"
-          
-          if [[ -z "${MATRIX_ARRAY}" || "${MATRIX_ARRAY}" == "null" || "${MATRIX_ARRAY}" == "[]" ]]; then
-            echo "ERROR: Generated matrix is empty or null"
-            exit 1
-          fi
-          
-          MATRIX="$(echo "${MATRIX_ARRAY}" | jq -c '{include: .}')"
-          
-          MATRIX_COUNT="$(echo "${MATRIX_ARRAY}" | jq 'length')"
-          echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
-          echo "Matrix length: ${#MATRIX}"
-          
-          # URL encode for safe propagation between jobs
-          MATRIX_ENCODED=$(echo -n "${MATRIX}" | jq -sRr @uri)
-          echo "matrix=${MATRIX_ENCODED}" >> "$GITHUB_OUTPUT"
-          
-          # Also try base64 
-          MATRIX_B64=$(echo -n "${MATRIX}" | base64 -w 0)
-          echo "matrix-b64=${MATRIX_B64}" >> "$GITHUB_OUTPUT"
-          
-      - name: dump matrix 
-        run: |
-          echo "Job will output matrix values from step:"
-          echo "URL-encoded: ${{ steps.set-matrix.outputs.matrix }}"
-          echo "Base64: ${{ steps.set-matrix.outputs.matrix-b64 }}"
-
-  debug-outputs:
-    needs: setup-matrix
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check job outputs
-        run: |
-          echo "URL output: ${{ needs.setup-matrix.outputs.matrix }}"
-          echo "B64 output: ${{ needs.setup-matrix.outputs.matrix-b64 }}"
-          echo "URL empty? ${{ needs.setup-matrix.outputs.matrix == '' }}"
-          echo "B64 empty? ${{ needs.setup-matrix.outputs.matrix-b64 == '' }}"
-
-  build:
-    needs: setup-matrix
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    # strategy:
-    #   fail-fast: false
-    #   matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix-raw) }}
-    steps:
-      - name: Debug what build job receives
-        run: |
-          echo "URL: ${{ needs.setup-matrix.outputs.matrix }}"
-          echo "B64: ${{ needs.setup-matrix.outputs.matrix-b64 }}"
-          echo "Go version: ${{ needs.setup-matrix.outputs.go-version }}"
-      
-      - uses: actions/checkout@v4
-      
-      - name: "Setup Go ${{ needs.setup-matrix.outputs.go-version }}"
+      - name: "Setup Go"
         uses: actions/setup-go@v4
         with:
-          go-version: "${{ needs.setup-matrix.outputs.go-version }}"
+          go-version: "${{ steps.get-go-version.outputs.go-version }}"
           cache: true
       - name: Fetch dependencies
         env:
