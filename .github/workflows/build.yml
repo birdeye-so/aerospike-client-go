@@ -5,6 +5,10 @@
 # - Add secrets: Repository Settings → env section (line ~56) → JSON template
 # - Fields: version (required), docker-user-name, docker-password, image-url (optional)
 
+permissions:
+  id-token: write
+  contents: read
+
 name: Aerospike Go Client Tests
 "on":
   push:
