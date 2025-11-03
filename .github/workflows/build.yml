@@ -26,7 +26,8 @@ jobs:
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix-b64: ${{ steps.set-matrix.outputs.matrix }}
+      matrix-raw: ${{ steps.set-matrix.outputs.matrix-raw }}
       go-version: ${{ steps.get-go-version.outputs.go-version }}
     steps:
       - uses: actions/checkout@v4
@@ -131,12 +132,27 @@ jobs:
           echo "Generated matrix with ${MATRIX_COUNT} configuration(s)"
           echo "Matrix length: ${#MATRIX}"
           
-          echo "::set-output name=matrix::${MATRIX}"
+          # Base64 encode to ensure it propagates correctly between jobs
+          MATRIX_B64=$(echo -n "${MATRIX}" | base64 -w 0)
+          echo "::set-output name=matrix::${MATRIX_B64}"
+          echo "::set-output name=matrix-raw::${MATRIX}"
           
       - name: dump matrix 
         run: |
-          echo "Job will output matrix value from step:"
-          echo "Value: ${{ steps.set-matrix.outputs.matrix }}"
+          echo "Job will output matrix values from step:"
+          echo "B64: ${{ steps.set-matrix.outputs.matrix }}"
+          echo "Raw: ${{ steps.set-matrix.outputs.matrix-raw }}"
+
+  debug-outputs:
+    needs: setup-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job outputs
+        run: |
+          echo "B64 output: ${{ needs.setup-matrix.outputs.matrix-b64 }}"
+          echo "Raw output: ${{ needs.setup-matrix.outputs.matrix-raw }}"
+          echo "B64 empty? ${{ needs.setup-matrix.outputs.matrix-b64 == '' }}"
+          echo "Raw empty? ${{ needs.setup-matrix.outputs.matrix-raw == '' }}"
 
   build:
     needs: setup-matrix
@@ -144,10 +160,16 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    # strategy:
+    #   fail-fast: false
+    #   matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix-raw) }}
     steps:
+      - name: Debug what build job receives
+        run: |
+          echo "B64: ${{ needs.setup-matrix.outputs.matrix-b64 }}"
+          echo "Raw: ${{ needs.setup-matrix.outputs.matrix-raw }}"
+          echo "Go version: ${{ needs.setup-matrix.outputs.go-version }}"
+      
       - uses: actions/checkout@v4
       
       - name: "Setup Go ${{ needs.setup-matrix.outputs.go-version }}"
