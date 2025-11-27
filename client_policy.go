@@ -56,7 +56,7 @@ type ClientPolicy struct {
 	// on every tend (usually 1 second).
 	//
 	// Servers 8.1+ have deprecated proto-fd-idle-ms. When proto-fd-idle-ms is ultimately removed,
-    // the server will stop automatically reaping based on socket idle timeouts.
+	// the server will stop automatically reaping based on socket idle timeouts.
 	//
 	// Default: 0 seconds
 	IdleTimeout time.Duration //= 0 seconds
@@ -189,6 +189,9 @@ type ClientPolicy struct {
 
 	// Determianes the interval for checking for configuration changes using configProvider.
 	ConfigInterval time.Duration // = 5 second
+
+	// PreferedNodes provides a list of prefered nodes to read from.
+	PreferedNodes []string
 }
 
 // NewClientPolicy generates a new ClientPolicy with default values.
