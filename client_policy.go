@@ -190,8 +190,8 @@ type ClientPolicy struct {
 	// Determianes the interval for checking for configuration changes using configProvider.
 	ConfigInterval time.Duration // = 5 second
 
-	// PreferedNodes provides a list of prefered nodes to read from.
-	PreferedNodes []string
+	// PreferredNodes provides a list of preferred nodes to read from.
+	PreferredNodes []string
 }
 
 // NewClientPolicy generates a new ClientPolicy with default values.

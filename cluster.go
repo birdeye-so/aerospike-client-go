@@ -857,10 +857,10 @@ func (clstr *Cluster) GetNodes() []*Node {
 	return clstr.nodes.Get()
 }
 
-// GetPreferedNode returns an active prefered node if any
-func (clstr *Cluster) GetPreferedNode() *Node {
+// GetPreferredNode returns an active preferred node if any
+func (clstr *Cluster) GetPreferredNode() *Node {
 	pol := clstr.clientPolicy.Load()
-	for _, nodeName := range pol.PreferedNodes {
+	for _, nodeName := range pol.PreferredNodes {
 		if node := clstr.findNodeByName(nodeName); node != nil && node.IsActive() {
 			return node
 		}

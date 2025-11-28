@@ -159,7 +159,7 @@ func GetNodeBatchWrite(cluster *Cluster, key *Key, replica ReplicaPolicy, prevNo
 
 // GetNodeRead returns a node for read operations
 func (ptn *Partition) GetNodeRead(cluster *Cluster) (*Node, Error) {
-	if node := cluster.GetPreferedNode(); node != nil {
+	if node := cluster.GetPreferredNode(); node != nil {
 		return node, nil
 	}
 
