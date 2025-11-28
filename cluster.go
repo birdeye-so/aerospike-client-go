@@ -857,17 +857,6 @@ func (clstr *Cluster) GetNodes() []*Node {
 	return clstr.nodes.Get()
 }
 
-// GetPreferredNode returns an active preferred node if any
-func (clstr *Cluster) GetPreferredNode() *Node {
-	pol := clstr.clientPolicy.Load()
-	for _, nodeName := range pol.PreferredNodes {
-		if node := clstr.findNodeByName(nodeName); node != nil && node.IsActive() {
-			return node
-		}
-	}
-	return nil
-}
-
 // GetSeedCount is the count of seed nodes
 func (clstr *Cluster) GetSeedCount() int {
 	res, _ := iatomic.MapSyncValue(&clstr.seeds, func(seeds []*Host) (int, error) {

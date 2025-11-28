@@ -159,8 +159,14 @@ func GetNodeBatchWrite(cluster *Cluster, key *Key, replica ReplicaPolicy, prevNo
 
 // GetNodeRead returns a node for read operations
 func (ptn *Partition) GetNodeRead(cluster *Cluster) (*Node, Error) {
-	if node := cluster.GetPreferredNode(); node != nil {
-		return node, nil
+	pol := cluster.clientPolicy.Load()
+	for _, nodeName := range pol.PreferredNodes {
+		for _, replica := range ptn.partitions.Replicas {
+			node := replica[ptn.PartitionId]
+			if node != nil && node.name == nodeName && node.IsActive() {
+				return node, nil
+			}
+		}
 	}
 
 	switch ptn.replica {
