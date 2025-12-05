@@ -159,14 +159,8 @@ func GetNodeBatchWrite(cluster *Cluster, key *Key, replica ReplicaPolicy, prevNo
 
 // GetNodeRead returns a node for read operations
 func (ptn *Partition) GetNodeRead(cluster *Cluster) (*Node, Error) {
-	pol := cluster.clientPolicy.Load()
-	for _, nodeName := range pol.PreferredNodes {
-		for _, replica := range ptn.partitions.Replicas {
-			node := replica[ptn.PartitionId]
-			if node != nil && node.name == nodeName && node.IsActive() {
-				return node, nil
-			}
-		}
+	if node := ptn.getPreferredNode(cluster); node != nil {
+		return node, nil
 	}
 
 	switch ptn.replica {
@@ -238,6 +232,25 @@ func (ptn *Partition) PrepareRetryWrite(isClientTimeout bool) {
 	if !isClientTimeout {
 		ptn.sequence++
 	}
+}
+
+func (ptn *Partition) getPreferredNode(cluster *Cluster) *Node {
+	if len(cluster.preferredNodes) == 0 {
+		return nil
+	}
+
+	replicas := ptn.partitions.Replicas
+
+	for range replicas {
+		index := cluster.replicaIndex.IncrementAndGet() % len(replicas)
+		node := replicas[index][ptn.PartitionId]
+
+		if node != nil && cluster.isPreferredNode(node.name) && node.IsActive() {
+			return node
+		}
+	}
+
+	return nil
 }
 
 func (ptn *Partition) getSequenceNode(cluster *Cluster) (*Node, Error) {

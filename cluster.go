@@ -90,6 +90,9 @@ type Cluster struct {
 	// Leaving this at cluster level since cluster is visible to nodes
 	// which will need this information when sending user-agent to the server.
 	clientModuleVersion string // e.g. v8.0.0, v8.1.0, etc."
+
+	// List of preferred nodes in cluster (read-only).
+	preferredNodes map[string]struct{}
 }
 
 // NewCluster generates a Cluster instance.
@@ -139,10 +142,16 @@ func NewCluster(policy *atomic.Pointer[ClientPolicy], hosts []*Host) (*Cluster, 
 
 		supportsPartitionQuery: *iatomic.NewBool(false),
 		clientModuleVersion:    getLibraryVersion(aesModule),
+
+		preferredNodes: make(map[string]struct{}),
 	}
 	newCluster.maxErrorCount.Set(loadedPolicy.MaxErrorRate)
 
 	newCluster.partitionWriteMap.Set(make(partitionMap))
+
+	for _, node := range loadedPolicy.PreferredNodes {
+		newCluster.preferredNodes[node] = struct{}{}
+	}
 
 	// setup auth info for cluster
 	if loadedPolicy.RequiresAuthentication() {
@@ -819,6 +828,11 @@ func (clstr *Cluster) removeNodes(nodesToRemove []*Node) {
 		return newNodes, nil
 	})
 
+}
+
+func (clstr *Cluster) isPreferredNode(nodeName string) bool {
+	_, ok := clstr.preferredNodes[nodeName]
+	return ok
 }
 
 // IsConnected returns true if cluster has nodes and is not already closed.
