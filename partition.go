@@ -240,14 +240,16 @@ func (ptn *Partition) getPreferredNode(cluster *Cluster) *Node {
 	}
 
 	replicas := ptn.partitions.Replicas
+	sequence := cluster.replicaIndex.IncrementAndGet()
 
 	for range replicas {
-		index := cluster.replicaIndex.IncrementAndGet() % len(replicas)
+		index := sequence % len(replicas)
 		node := replicas[index][ptn.PartitionId]
 
 		if node != nil && cluster.isPreferredNode(node.name) && node.IsActive() {
 			return node
 		}
+		sequence++
 	}
 
 	return nil
